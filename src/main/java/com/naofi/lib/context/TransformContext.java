@@ -8,7 +8,6 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 
 public class TransformContext {
@@ -19,8 +18,7 @@ public class TransformContext {
     private Method rootMethod;
     private String grammarPackage;
     private String grammarName = null;
-    private List<Method> preMethods = new ArrayList<>();
-    private List<Method> postMethods = new ArrayList<>();
+    private List<RuleInfo> rules;
     private TreeVisitor treeVisitor;
 
     public TransformContext(String grammarPackage, String rootRuleName, Class<?>... transformClasses) {
@@ -31,7 +29,7 @@ public class TransformContext {
             processClass(cl);
         }
         checkRootRule();
-        treeVisitor = new TreeVisitor(parser, lexer, visitor, rootMethod, preMethods, postMethods);
+        treeVisitor = new TreeVisitor(parser, lexer, visitor, rootMethod, rules);
     }
 
     public void process(CharStream chars) {
@@ -69,12 +67,12 @@ public class TransformContext {
                 if (method.getReturnType() != String.class) {
                     throw new IllegalStateException("Method return type must be String: " + method);
                 }
-                postMethods.add(method);
+                rules.add(new RuleInfo(method));
             } else if (method.isAnnotationPresent(Pre.class)) {
                 if (method.getReturnType() != String.class) {
                     throw new IllegalStateException("Method return type must be String: " + method);
                 }
-                preMethods.add(method);
+                rules.add(new RuleInfo(method));
             }
         }
     }
