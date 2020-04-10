@@ -1,5 +1,6 @@
 package com.naofi.lib.context;
 
+import com.naofi.antlr.MathParser;
 import net.sf.cglib.proxy.Enhancer;
 import net.sf.cglib.proxy.MethodInterceptor;
 import net.sf.cglib.proxy.MethodProxy;
@@ -27,13 +28,8 @@ class TreeVisitor {
         proxy = new Enhancer();
     }
 
-    void process(CharStream chars) {
+    void process(ParseTree tree) {
         try {
-            Lexer lexer = (Lexer) lexerClass.getConstructor(CharStream.class).newInstance(chars);
-            CommonTokenStream tokens = new CommonTokenStream(lexer);
-            Parser parser = (Parser) parserClass.getConstructor(TokenStream.class).newInstance(tokens);
-            ParseTree tree = (ParseTree) rootRule.invoke(parser);
-
             Enhancer proxy = new Enhancer();
             proxy.setSuperclass(visitorClass);
             proxy.setCallback((MethodInterceptor)TreeVisitor::process);

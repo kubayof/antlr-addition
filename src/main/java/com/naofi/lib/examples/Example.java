@@ -7,8 +7,8 @@ import static com.naofi.antlr.MathParser.*;
 @Transform("Math")
 public class Example {
 
-    @Post("expr: $a + $b")
-    public String simpleAddition(ExprContext a, ExprContext b) {
+    @Post("expr: `a` + `b`")
+    public String simpleAddition(ExprContext a, TermContext b) {
         return "$a - $b";
     }
 }

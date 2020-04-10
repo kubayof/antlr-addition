@@ -3,42 +3,47 @@ package com.naofi.lib.context;
 import com.naofi.lib.annotation.Post;
 import com.naofi.lib.annotation.Pre;
 import com.naofi.lib.annotation.Transform;
-import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.tree.ParseTree;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 
 public class TransformContext {
-    private Class<?> parser;
-    private Class<?> lexer;
-    private Class<?> visitor;
+    private Class<?> parserClass;
+    private Class<?> lexerClass;
+    private Class<?> visitorClass;
     private String rootRuleName;
     private Method rootMethod;
     private String grammarPackage;
     private String grammarName = null;
     private List<RuleInfo> rules;
     private TreeVisitor treeVisitor;
+    private Parser parser;
+    private ParseTree tree;
+    private CharStream chars;
 
-    public TransformContext(String grammarPackage, String rootRuleName, Class<?>... transformClasses) {
+    public TransformContext(String grammarPackage, String rootRuleName, CharStream chars, Class<?>... transformClasses) {
         disableUnsafeWarning();
+        this.chars = chars;
         this.grammarPackage = grammarPackage;
         this.rootRuleName = rootRuleName;
+        rules = new ArrayList<>();
+
         for (Class<?> cl : transformClasses) {
             processClass(cl);
         }
-        checkRootRule();
-        treeVisitor = new TreeVisitor(parser, lexer, visitor, rootMethod, rules);
-    }
-
-    public void process(CharStream chars) {
-        treeVisitor.process(chars);
+        treeVisitor = new TreeVisitor(parserClass, lexerClass, visitorClass, rootMethod, rules);
+        treeVisitor.process(tree);
     }
 
     private void checkRootRule() {
         try {
-            rootMethod = parser.getMethod(rootRuleName);
+            rootMethod = parserClass.getMethod(rootRuleName);
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException("Cannot find parser rule with name '" + rootRuleName + "'");
         }
@@ -54,6 +59,8 @@ public class TransformContext {
         if (this.grammarName == null) {
             this.grammarName = grammarName;
             findProcessors();
+            checkRootRule();
+            createParserAndTree();
         } else {
             if (!this.grammarName.equals(grammarName)) {
                 throw new IllegalStateException("Classes in one TransformContext must have same grammar");
@@ -67,12 +74,12 @@ public class TransformContext {
                 if (method.getReturnType() != String.class) {
                     throw new IllegalStateException("Method return type must be String: " + method);
                 }
-                rules.add(new RuleInfo(method));
+                rules.add(new RuleInfo(method, parser));
             } else if (method.isAnnotationPresent(Pre.class)) {
                 if (method.getReturnType() != String.class) {
                     throw new IllegalStateException("Method return type must be String: " + method);
                 }
-                rules.add(new RuleInfo(method));
+                rules.add(new RuleInfo(method, parser));
             }
         }
     }
@@ -80,23 +87,34 @@ public class TransformContext {
     private void findProcessors() {
         String lexerName = grammarPackage + "." + grammarName + "Lexer";
         try {
-            lexer = Class.forName(lexerName);
+            lexerClass = Class.forName(lexerName);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("Cannot find lexer in package '" + grammarPackage + "'");
         }
 
         String parserName = grammarPackage + "." + grammarName + "Parser";
         try {
-            parser = Class.forName(parserName);
+            parserClass = Class.forName(parserName);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("Cannot find parser in package '" + grammarPackage + "'");
         }
 
         String visitorName = grammarPackage + "." + grammarName + "BaseVisitor";
         try {
-            visitor = Class.forName(visitorName);
+            visitorClass = Class.forName(visitorName);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("Cannot find visitor in package '" + grammarPackage + "'");
+        }
+    }
+
+    private void createParserAndTree() {
+        try {
+            Lexer lexer = (Lexer) lexerClass.getConstructor(CharStream.class).newInstance(chars);
+            CommonTokenStream tokens = new CommonTokenStream(lexer);
+            parser = (Parser) parserClass.getConstructor(TokenStream.class).newInstance(tokens);
+            tree = (ParseTree) rootMethod.invoke(parser);
+        } catch (NoSuchMethodException|InstantiationException|IllegalAccessException|InvocationTargetException e) {
+            throw new IllegalStateException(e);
         }
     }
 
