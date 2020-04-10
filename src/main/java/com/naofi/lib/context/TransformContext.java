@@ -10,6 +10,7 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -70,15 +71,16 @@ public class TransformContext {
         Method[] methods = cl.getDeclaredMethods();
 
         for (Method method : methods) {
+            if (method.getReturnType() != String.class) {
+                throw new IllegalStateException("Method return type must be String: " + method);
+            }
+            if (!Modifier.isStatic(method.getModifiers())) {
+                throw new IllegalStateException("Method '" + method.getName() + "' is not static");
+            }
             if (method.isAnnotationPresent(Post.class)) {
-                if (method.getReturnType() != String.class) {
-                    throw new IllegalStateException("Method return type must be String: " + method);
-                }
                 rules.add(new RuleInfo(method, parser));
             } else if (method.isAnnotationPresent(Pre.class)) {
-                if (method.getReturnType() != String.class) {
-                    throw new IllegalStateException("Method return type must be String: " + method);
-                }
+
                 rules.add(new RuleInfo(method, parser));
             }
         }

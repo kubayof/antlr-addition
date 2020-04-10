@@ -1,6 +1,5 @@
 package com.naofi.lib.context;
 
-import com.naofi.antlr.MathParser;
 import net.sf.cglib.proxy.Enhancer;
 import net.sf.cglib.proxy.MethodInterceptor;
 import net.sf.cglib.proxy.MethodProxy;
@@ -16,7 +15,7 @@ class TreeVisitor {
     private Class<?> lexerClass;
     private Class<?> visitorClass;
     private Method rootRule;
-    private List<RuleInfo> rules;
+    private final List<RuleInfo> rules;
     private Enhancer proxy;
 
     TreeVisitor(Class<?> parserClass, Class<?> lexerClass, Class<?> visitorClass, Method rootRule, List<RuleInfo> rules) {
@@ -32,7 +31,7 @@ class TreeVisitor {
         try {
             Enhancer proxy = new Enhancer();
             proxy.setSuperclass(visitorClass);
-            proxy.setCallback((MethodInterceptor)TreeVisitor::process);
+            proxy.setCallback((MethodInterceptor)this::process);
 
             ParseTreeVisitor<Object> visitor = (ParseTreeVisitor<Object>)proxy.create();
 
@@ -43,7 +42,7 @@ class TreeVisitor {
         }
     }
 
-    private static Object process(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
+    private Object process(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
         String name = method.getName();
         if (!name.equals("visit") &&
             !name.equals("visitChildren") &&
@@ -56,7 +55,10 @@ class TreeVisitor {
         return proxy.invokeSuper(obj, args);
     }
 
-    private static void processRuleContext(RuleContext context) {
-        System.out.println(context.getText());
+    private void processRuleContext(RuleContext context) {
+        for (RuleInfo info : rules) {
+            info.post(context);
+        }
+//        System.out.println(context.getText());
     }
 }

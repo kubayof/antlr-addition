@@ -3,6 +3,8 @@ package com.naofi.lib.context;
 import com.naofi.lib.annotation.Post;
 import com.naofi.lib.annotation.Pre;
 import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.tree.ParseTree;
+import org.antlr.v4.runtime.tree.pattern.ParseTreeMatch;
 import org.antlr.v4.runtime.tree.pattern.ParseTreePattern;
 
 import java.lang.reflect.Field;
@@ -23,8 +25,10 @@ class RuleInfo {
     private final Pattern grammarDefPattern = Pattern.compile("[A-Za-z0-9]+:");
     private final Map<String, Class<?>> params = new HashMap<>();
     private List<String> ruleNames;
+    private List<String> paramRuleNames;
 
     RuleInfo(Method method, Parser parser) {
+        paramRuleNames = new ArrayList<>();
         Class<?> parserClass = parser.getClass();
         this.method = method;
         checkParameters();
@@ -53,7 +57,7 @@ class RuleInfo {
             throw new IllegalStateException("Cannot find grammar rule in expr '" + patternStr + "'");
         }
         String grammar = patternStr.substring(0, matcher.end() - 1);
-        System.out.println("GRAMMAR: " + grammar);
+//        System.out.println("GRAMMAR: " + grammar);
 
         int ruleId;
         try {
@@ -98,8 +102,9 @@ class RuleInfo {
                     throw new IllegalStateException("Cannot resolve variable '" + var + "' in method " + method.getName());
                 }
                 String simpleName = params.get(var).getSimpleName();
-                String ruleName = simpleName.substring(0, simpleName.length() - 7);
-                builder.append(getRuleName(ruleName));
+                String ruleName = getRuleName(simpleName.substring(0, simpleName.length() - 7));
+                paramRuleNames.add(ruleName);
+                builder.append(ruleName);
                 builder.append(">");
 
             } else {
@@ -107,7 +112,7 @@ class RuleInfo {
             }
         }
 
-        System.out.println("Formatted string: '" + builder.toString() + "', rule id: " + ruleId);
+//        System.out.println("Formatted string: '" + builder.toString() + "', rule id: " + ruleId);
         try {
             pattern = parser.compileParseTreePattern(builder.toString(), ruleId);
         } catch (NoViableAltException e) {
@@ -115,18 +120,38 @@ class RuleInfo {
         }
     }
 
-
-
-
-
-    private Object pre(RuleContext context) {
-
-        return null;
+    private ParseTreeMatch pre(RuleContext context) {
+        return pattern.match(context);
     }
 
-    private Object post(RuleContext context) {
+    public List<ParseTree> post(RuleContext context) {
+        ParseTreeMatch match =  pattern.match(context);
+        if (!match.succeeded()) {
+            return null;
+        }
+        List<ParseTree> args = new ArrayList<>();
+        Map<String, Integer> ruleNamesMap = new HashMap<>();
+        for (String p : paramRuleNames) {
+            if (ruleNamesMap.containsKey(p)) {
+                int num = ruleNamesMap.get(p);
+                args.add(match.getAll(p).get(num));
+                ruleNamesMap.replace(p, num+1);
+            } else {
+                args.add(match.getAll(p).get(0));
+                ruleNamesMap.put(p, 1);
+            }
+        }
+        invokeMethod(args);
+        return args;
+    }
 
-        return null;
+    private void invokeMethod(List<ParseTree> args) {
+        try {
+            ParseTree[] params = args.toArray(ParseTree[]::new);
+            method.invoke(null, params);
+        } catch (IllegalAccessException|InvocationTargetException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     //Pre processing methods

@@ -8,7 +8,8 @@ import static com.naofi.antlr.MathParser.*;
 public class Example {
 
     @Post("expr: `a` + `b`")
-    public String simpleAddition(ExprContext a, TermContext b) {
+    public static String simpleAddition(ExprContext a, TermContext b) {
+        System.out.println("Matched parts: '" + a.getText() + "' and '" + b.getText() + "'");
         return "$a - $b";
     }
 }

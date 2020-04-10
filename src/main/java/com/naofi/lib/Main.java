@@ -7,10 +7,12 @@ import com.naofi.lib.examples.Example;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.pattern.ParseTreePattern;
 
+import java.lang.reflect.Method;
+
 public class Main {
 
     public static void main(String[] consoleArgs) throws Exception {
-        CharStream text = CharStreams.fromString("1 + 2");
+        CharStream text = CharStreams.fromString("(1 + 2) * (5 + 6)");
         TransformContext context = new TransformContext("com.naofi.antlr", "expr", text, Example.class);
 
 //        MathLexer lexer = new MathLexer(text);
