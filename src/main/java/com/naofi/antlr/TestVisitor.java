@@ -1,11 +1,5 @@
 package com.naofi.antlr;
 
-import org.antlr.v4.runtime.RuleContext;
-import org.antlr.v4.runtime.tree.AbstractParseTreeVisitor;
-import org.antlr.v4.runtime.tree.RuleNode;
-
-import java.lang.reflect.Method;
-
 public class TestVisitor extends MathBaseVisitor<String> {
     @Override
     public String visitAddExpr(MathParser.AddExprContext ctx) {

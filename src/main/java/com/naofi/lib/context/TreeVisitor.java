@@ -27,7 +27,10 @@ class TreeVisitor {
         proxy = new Enhancer();
     }
 
-    void process(ParseTree tree) {
+    ParseTree process(ParseTree tree) {
+        ParserRuleContext root = new ParserRuleContext();
+        root.addChild((RuleContext)tree);//All the nodes must have parent
+        tree.setParent(root);
         try {
             Enhancer proxy = new Enhancer();
             proxy.setSuperclass(visitorClass);
@@ -35,11 +38,13 @@ class TreeVisitor {
 
             ParseTreeVisitor<Object> visitor = (ParseTreeVisitor<Object>)proxy.create();
 
-            visitor.visit(tree);
+            visitor.visit(root);
 
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+
+        return root;
     }
 
     private Object process(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
@@ -49,16 +54,30 @@ class TreeVisitor {
             name.startsWith("visit") &&
             args.length == 1 &&
             args[0] instanceof RuleContext) {
-            processRuleContext((RuleContext)args[0]);
+            if (processRuleContextPre((RuleContext)args[0])) {
+                return null;
+            }
+            Object result = proxy.invokeSuper(obj, args);
+            processRuleContextPost((RuleContext)args[0]);
+            return result;
+        } else {
+            return proxy.invokeSuper(obj, args);
         }
-
-        return proxy.invokeSuper(obj, args);
     }
 
-    private void processRuleContext(RuleContext context) {
+    private boolean processRuleContextPre(RuleContext context) {
+        boolean matched = false;
+        for (RuleInfo info : rules) {
+            if (info.pre(context) != null) {
+                matched = true;
+            }
+        }
+        return matched;
+    }
+
+    private void processRuleContextPost(RuleContext context) {
         for (RuleInfo info : rules) {
             info.post(context);
         }
-//        System.out.println(context.getText());
     }
 }

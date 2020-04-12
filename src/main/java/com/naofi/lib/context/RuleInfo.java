@@ -1,5 +1,6 @@
 package com.naofi.lib.context;
 
+import com.naofi.antlr.MathLexer;
 import com.naofi.lib.annotation.Post;
 import com.naofi.lib.annotation.Pre;
 import org.antlr.v4.runtime.*;
@@ -16,21 +17,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 class RuleInfo {
-    private ParseTreePattern pattern;
+    private final ParseTreePattern pattern;
     private final Method method;
     private Pre pre = null;
     private Post post = null;
     private final char begin = '`';
     private final char end = '`';
-    private final Pattern grammarDefPattern = Pattern.compile("[A-Za-z0-9]+:");
     private final Map<String, Class<?>> params = new HashMap<>();
-    private List<String> ruleNames;
-    private List<String> paramRuleNames;
+    private final List<String> ruleNames;
+    private final List<String> paramRuleNames;
+    private final Parser parser;
+    private Method ruleMethod;
+    private final Class<?> lexerClass;
+    private final Class<?> parserClass;
 
-    RuleInfo(Method method, Parser parser) {
+    RuleInfo(Method method, Parser parser, Class<?> lexerClass) {
         paramRuleNames = new ArrayList<>();
-        Class<?> parserClass = parser.getClass();
+        this.lexerClass = lexerClass;
+        parserClass = parser.getClass();
         this.method = method;
+        this.parser = parser;
         checkParameters();
 
         String[] ruleNames;
@@ -52,11 +58,14 @@ class RuleInfo {
             patternStr = post.value();
         }
 
+        Pattern grammarDefPattern = Pattern.compile("[A-Za-z0-9]+:");
         Matcher matcher = grammarDefPattern.matcher(patternStr);
         if (!matcher.lookingAt()) {
             throw new IllegalStateException("Cannot find grammar rule in expr '" + patternStr + "'");
         }
         String grammar = patternStr.substring(0, matcher.end() - 1);
+
+        setRootRule(grammar);
 //        System.out.println("GRAMMAR: " + grammar);
 
         int ruleId;
@@ -120,11 +129,21 @@ class RuleInfo {
         }
     }
 
-    private ParseTreeMatch pre(RuleContext context) {
-        return pattern.match(context);
+    public List<ParseTree> pre(RuleContext context) {
+        if (pre == null) {
+            return null;
+        }
+        return process(context);
     }
 
     public List<ParseTree> post(RuleContext context) {
+        if (post == null) {
+            return null;
+        }
+        return process(context);
+    }
+
+    private List<ParseTree> process(RuleContext context) {
         ParseTreeMatch match =  pattern.match(context);
         if (!match.succeeded()) {
             return null;
@@ -141,14 +160,33 @@ class RuleInfo {
                 ruleNamesMap.put(p, 1);
             }
         }
-        invokeMethod(args);
+        String result = invokeMethod(args);
+        try {
+            Lexer lexer = (Lexer)lexerClass.getConstructor(CharStream.class).newInstance(CharStreams.fromString(result));
+            Parser parser = (Parser)parserClass.getConstructor(TokenStream.class).newInstance(new CommonTokenStream(lexer));
+            ParseTree tree = (ParseTree)ruleMethod.invoke(parser);
+
+            ParserRuleContext parent = (ParserRuleContext) context.getParent();
+            List<ParseTree> children = new ArrayList<>();
+            for (ParseTree child : parent.children) {
+                if (child == context) {
+                    children.add(tree);
+                } else {
+                    children.add(child);
+                }
+            }
+            parent.children = children;
+
+        } catch (NoSuchMethodException|InvocationTargetException|IllegalAccessException|InstantiationException e) {
+            throw new IllegalStateException(e);
+        }
         return args;
     }
 
-    private void invokeMethod(List<ParseTree> args) {
+    private String invokeMethod(List<ParseTree> args) {
         try {
             ParseTree[] params = args.toArray(ParseTree[]::new);
-            method.invoke(null, params);
+            return (String) method.invoke(null, params);
         } catch (IllegalAccessException|InvocationTargetException e) {
             throw new IllegalStateException(e);
         }
@@ -164,6 +202,15 @@ class RuleInfo {
                         p.isNamePresent() + ":" + p.getName() + "' of type: '" + p.getType().getName() + "'");
 
             }
+        }
+    }
+
+    private void setRootRule(String rule) {
+        try {
+            String ruleName = getRuleName(rule);
+            ruleMethod = parser.getClass().getDeclaredMethod(ruleName);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
         }
     }
 

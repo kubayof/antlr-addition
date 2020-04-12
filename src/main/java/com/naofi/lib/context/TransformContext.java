@@ -24,22 +24,31 @@ public class TransformContext {
     private String grammarName = null;
     private List<RuleInfo> rules;
     private TreeVisitor treeVisitor;
-    private Parser parser;
+    private Parser parser = null;
     private ParseTree tree;
     private CharStream chars;
+    private Class<?>[] transformClasses;
 
-    public TransformContext(String grammarPackage, String rootRuleName, CharStream chars, Class<?>... transformClasses) {
+    public TransformContext(String grammarPackage, String rootRuleName, Class<?>... transformClasses) {
         disableUnsafeWarning();
-        this.chars = chars;
         this.grammarPackage = grammarPackage;
         this.rootRuleName = rootRuleName;
         rules = new ArrayList<>();
+        this.transformClasses = transformClasses;
+    }
 
-        for (Class<?> cl : transformClasses) {
-            processClass(cl);
+    public ParseTree process (CharStream chars) {
+        this.chars = chars;
+        if (parser == null) {
+            for (Class<?> cl : transformClasses) {
+                processClass(cl);
+            }
+            treeVisitor = new TreeVisitor(parserClass, lexerClass, visitorClass, rootMethod, rules);
+        } else {
+            createParserAndTree();
         }
-        treeVisitor = new TreeVisitor(parserClass, lexerClass, visitorClass, rootMethod, rules);
-        treeVisitor.process(tree);
+
+        return treeVisitor.process(tree);
     }
 
     private void checkRootRule() {
@@ -78,10 +87,10 @@ public class TransformContext {
                 throw new IllegalStateException("Method '" + method.getName() + "' is not static");
             }
             if (method.isAnnotationPresent(Post.class)) {
-                rules.add(new RuleInfo(method, parser));
+                rules.add(new RuleInfo(method, parser, lexerClass));
             } else if (method.isAnnotationPresent(Pre.class)) {
 
-                rules.add(new RuleInfo(method, parser));
+                rules.add(new RuleInfo(method, parser, lexerClass));
             }
         }
     }
@@ -91,21 +100,21 @@ public class TransformContext {
         try {
             lexerClass = Class.forName(lexerName);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("Cannot find lexer in package '" + grammarPackage + "'");
+            throw new IllegalStateException("Cannot find lexer in package '" + grammarPackage + "', expected lexer name: '" + lexerName + "'");
         }
 
         String parserName = grammarPackage + "." + grammarName + "Parser";
         try {
             parserClass = Class.forName(parserName);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("Cannot find parser in package '" + grammarPackage + "'");
+            throw new IllegalStateException("Cannot find parser in package '" + grammarPackage + "', expected parser name: '" + parserName + "'");
         }
 
         String visitorName = grammarPackage + "." + grammarName + "BaseVisitor";
         try {
             visitorClass = Class.forName(visitorName);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("Cannot find visitor in package '" + grammarPackage + "'");
+            throw new IllegalStateException("Cannot find visitor in package '" + grammarPackage + "', expected visitor name: '" + visitorName + "'");
         }
     }
 
