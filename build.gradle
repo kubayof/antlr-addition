@@ -1,0 +1,41 @@
+apply plugin: 'java'
+apply plugin: 'antlr'
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+group 'com.naofi'
+version '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'org.antlr', name: 'antlr4-runtime', version: '4.8'
+    implementation group: 'cglib', name: 'cglib', version: '3.3.0'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    antlr group: 'org.antlr', name: 'antlr4', version: '4.8'
+}
+
+
+generateGrammarSource {
+    maxHeapSize = "64m"
+    arguments += ["-visitor",  "-package", "com.naofi.antlr.extension.generated"]
+    outputDirectory = new File("src/main/java/com/naofi/antlr/extension/generated/".toString())
+}
+
+compileJava {
+    options.compilerArgs += ["-parameters", "-g"]
+}
+
+compileTestJava {
+    options.compilerArgs += ["-parameters", "-g"]
+}
+
+compileJava.dependsOn generateGrammarSource
+sourceSets {
+    generated {
+        java.srcDir 'src/main/java'
+    }
+}
